@@ -7,9 +7,12 @@ An email is rejected if any of these is true:
 1. It fails the shape check `/^[^@\s]+@[^@\s]+\.[^@\s]+$/`
 2. Its domain is on the **competitor** list, exact match or any sub-domain
 3. Its domain is on the **blocked** list (ad-hoc manual blocks), exact match or any sub-domain
-4. Its domain is on the **free provider** list, exact match only
+4. Its domain is on the **disposable** list, exact match or any sub-domain
+5. Its domain is on the **free provider** list, exact match only
 
-The sub-domain asymmetry is deliberate. `sales.apollo.io` is a competitor, `foo.gmail.com` is not a free provider.
+Verdicts are `ok`, `blocked`, `disposable`, `free`, plus `invalid` from `validateEmail()`. The first list to match decides the message, so disposable is checked before free.
+
+The sub-domain asymmetry is deliberate. `sales.apollo.io` is a competitor and `x.mailinator.com` is disposable, but `foo.gmail.com` is not a free provider.
 
 ---
 
@@ -45,7 +48,8 @@ Editing `data/blocked.json` or `data/competitors.json` by hand works too, as lon
 
 | Path | Role |
 |---|---|
-| `data/*.json` | The source of truth. Humans and the CLI edit these. |
+| `data/free.json`, `common-free.json`, `competitors.json`, `blocked.json` | The source of truth. Humans and the CLI edit these. |
+| `data/disposable.json` | Machine-maintained. Synced weekly from upstream, never edit by hand. |
 | `generated/data-full.js` | Full lists as a module. Imported by `hs-block`. |
 | `generated/data-light.js` | Small lists as a module. Imported by `hs-block/light`. |
 | `generated/email-domains.json` | Published file the app fetches at runtime. |
@@ -54,6 +58,27 @@ Editing `data/blocked.json` or `data/competitors.json` by hand works too, as lon
 | `bin/build.mjs` | Regenerates `generated/` from `data/`. |
 
 `generated/` is committed on purpose. It means consumers need no build step, and the app can fetch the published JSON straight from `main`.
+
+---
+
+## The disposable list
+
+Synced from [disposable-email-domains](https://github.com/disposable-email-domains/disposable-email-domains), about 8,700 domains, CC0 licensed so there is no attribution obligation. `.github/workflows/sync-disposable.yml` runs every Monday at 06:00 UTC and commits any change. You can also run it from the Actions tab, or locally:
+
+```bash
+npm run sync:disposable
+npm run sync:disposable -- --dry-run   # see what would change
+```
+
+Because this runs unattended and feeds a live blocking path, the sync refuses to write when something looks wrong:
+
+- Fewer than 5,000 domains fetched, which means a broken or truncated upstream file
+- The list would shrink by more than 10% in one go
+- A hardcoded never-block set (our own domain and the major mailbox providers) is stripped out regardless of what upstream says
+
+A refused sync fails the workflow loudly and leaves the previous list in place. Stale beats wrong.
+
+The list is server-side only. At 8,700 domains it would dominate a page bundle, so `hs-block/light` does not carry it and the browser never flags a disposable address as you type. The server catches it on submit.
 
 ---
 
@@ -67,7 +92,8 @@ import { validateEmail, classifyEmail } from 'hs-block';
 const v = validateEmail(input);
 // { ok: false, verdict: 'free', message: 'Please use your corporate work email.', domain: 'gmail.com' }
 
-classifyEmail('karan@apollo.io'); // 'blocked'
+classifyEmail('karan@apollo.io');      // 'blocked'
+classifyEmail('karan@mailinator.com'); // 'disposable'
 ```
 
 **`hs-block/light`** for browsers. Competitor and manual blocks in full, plus 33 common free providers. Instant feedback only, and bypassable with devtools, so the server must always re-check.
@@ -93,11 +119,13 @@ const v = emails.validate(input);
 if (!v.ok) return reject(v.message);
 ```
 
-`emails.status()` reports whether it is serving `bundled` or `live` lists, the version, the last refresh and the last error. Worth exposing on a health endpoint.
+`emails.status()` reports whether it is serving `bundled` or `live` lists, the version, the last refresh, the last error and the current list sizes. Worth exposing on a health endpoint.
+
+Refreshes use `If-None-Match`, so an unchanged list costs a 304 rather than a few hundred KB.
 
 ### Why the bundled copy still matters
 
-The pinned package is the floor. If GitHub is unreachable, the fetch times out or the payload looks wrong, the validator keeps serving the last good lists and never fails open. Two sanity floors reject a bad payload: at least 1,000 free domains and at least 10 competitors. A truncated file cannot silently unblock everything.
+The pinned package is the floor. If GitHub is unreachable, the fetch times out or the payload looks wrong, the validator keeps serving the last good lists and never fails open. Three sanity floors reject a bad payload: at least 1,000 free domains, at least 10 competitors, and at least 5,000 disposable domains if that key is present at all. A truncated file cannot silently unblock everything.
 
 ---
 

@@ -4,8 +4,8 @@
 // JSON from the repo's main branch.
 //
 // Server-side only. It imports the full list.
-import { FREE, COMPETITORS, BLOCKED, VERSION, GENERATED_AT } from '../generated/data-full.js';
-import { classifyDomain, validateWith, emailDomain } from './core.js';
+import { FREE, COMPETITORS, BLOCKED, DISPOSABLE, VERSION, GENERATED_AT } from '../generated/data-full.js';
+import { classifyDomain, validateWith, emailDomain, toSet } from './core.js';
 
 export const LIVE_URL =
   'https://raw.githubusercontent.com/krnshrm/hs-block/main/generated/email-domains.json';
@@ -15,12 +15,17 @@ export const LIVE_URL =
 // lists stay in place.
 const MIN_FREE = 1000;
 const MIN_COMPETITORS = 10;
+const MIN_DISPOSABLE = 5000;
 
 function shapeOk(payload) {
   if (!payload || typeof payload !== 'object') return false;
-  const { free, competitors, blocked } = payload;
+  const { free, competitors, blocked, disposable } = payload;
   if (!Array.isArray(free) || !Array.isArray(competitors) || !Array.isArray(blocked)) return false;
   if (free.length < MIN_FREE || competitors.length < MIN_COMPETITORS) return false;
+  // disposable may be absent on an older payload; if present it must be sane.
+  if (disposable !== undefined) {
+    if (!Array.isArray(disposable) || disposable.length < MIN_DISPOSABLE) return false;
+  }
   return true;
 }
 
@@ -50,8 +55,9 @@ export function createLiveValidator(options = {}) {
 
   let lists = {
     free: new Set(FREE),
-    competitors: COMPETITORS,
-    blocked: BLOCKED,
+    competitors: toSet(COMPETITORS),
+    blocked: toSet(BLOCKED),
+    disposable: toSet(DISPOSABLE),
   };
   let meta = {
     source: 'bundled',
@@ -60,6 +66,7 @@ export function createLiveValidator(options = {}) {
     lastRefresh: null,
     lastError: null,
   };
+  let etag = null;
   let timer = null;
 
   async function refresh() {
@@ -67,18 +74,31 @@ export function createLiveValidator(options = {}) {
       throw new Error('hs-block/live: no fetch available. Pass options.fetchImpl.');
     }
     try {
-      const res = await fetchImpl(url, {
-        headers: { accept: 'application/json' },
-        cache: 'no-store',
-      });
+      const headers = { accept: 'application/json' };
+      // The payload is a few hundred KB and rarely changes, so ask for it only
+      // when it actually has.
+      if (etag) headers['if-none-match'] = etag;
+
+      const res = await fetchImpl(url, { headers, cache: 'no-store' });
+
+      if (res.status === 304) {
+        meta = { ...meta, lastRefresh: new Date().toISOString(), lastError: null };
+        return true;
+      }
       if (!res.ok) throw new Error(`hs-block/live: HTTP ${res.status} from ${url}`);
+
       const payload = await res.json();
       if (!shapeOk(payload)) throw new Error('hs-block/live: payload failed sanity checks');
 
+      etag = (res.headers && typeof res.headers.get === 'function' && res.headers.get('etag')) || null;
+
       lists = {
         free: new Set(payload.free),
-        competitors: payload.competitors,
-        blocked: payload.blocked,
+        competitors: toSet(payload.competitors),
+        blocked: toSet(payload.blocked),
+        // A payload with no disposable list is an older one: keep the bundled
+        // list rather than silently dropping the rule.
+        disposable: payload.disposable ? toSet(payload.disposable) : toSet(DISPOSABLE),
       };
       meta = {
         source: 'live',
@@ -92,9 +112,10 @@ export function createLiveValidator(options = {}) {
           version: meta.version,
           generatedAt: meta.generatedAt,
           counts: {
-            free: payload.free.length,
-            competitors: payload.competitors.length,
-            blocked: payload.blocked.length,
+            free: lists.free.size,
+            competitors: lists.competitors.size,
+            blocked: lists.blocked.size,
+            disposable: lists.disposable.size,
           },
         });
       }
@@ -123,7 +144,17 @@ export function createLiveValidator(options = {}) {
     refresh,
     start,
     stop,
-    status: () => ({ ...meta, url, intervalMs }),
+    status: () => ({
+      ...meta,
+      url,
+      intervalMs,
+      counts: {
+        free: lists.free.size,
+        competitors: lists.competitors.size,
+        blocked: lists.blocked.size,
+        disposable: lists.disposable.size,
+      },
+    }),
     classify: (email) => classifyDomain(emailDomain(email), lists),
     validate: (email) => validateWith(email, lists),
   };

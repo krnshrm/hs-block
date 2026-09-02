@@ -1,25 +1,48 @@
 {
   "name": "hs-block",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Single source of truth for hubsell email domain rules: competitors, manual blocks and free providers.",
   "license": "UNLICENSED",
   "type": "module",
   "main": "./src/index.js",
   "types": "./types/index.d.ts",
   "exports": {
-    ".": { "types": "./types/index.d.ts", "default": "./src/index.js" },
-    "./light": { "types": "./types/light.d.ts", "default": "./src/light.js" },
-    "./live": { "types": "./types/live.d.ts", "default": "./src/live.js" },
+    ".": {
+      "types": "./types/index.d.ts",
+      "default": "./src/index.js"
+    },
+    "./light": {
+      "types": "./types/light.d.ts",
+      "default": "./src/light.js"
+    },
+    "./live": {
+      "types": "./types/live.d.ts",
+      "default": "./src/live.js"
+    },
     "./data": "./generated/email-domains.json"
   },
-  "files": ["src", "types", "generated", "data", "bin", "README.md", "SYNC.md"],
+  "files": [
+    "src",
+    "types",
+    "generated",
+    "data",
+    "bin",
+    "README.md",
+    "SYNC.md"
+  ],
   "scripts": {
     "build": "node bin/build.mjs",
     "check": "node bin/build.mjs --check",
     "block": "node bin/block.mjs",
     "block:competitor": "node bin/block.mjs --competitor",
-    "test": "node --test test/*.test.mjs"
+    "test": "node --test test/*.test.mjs",
+    "sync:disposable": "node bin/sync-disposable.mjs"
   },
-  "engines": { "node": ">=18" },
-  "repository": { "type": "git", "url": "git+https://github.com/krnshrm/hs-block.git" }
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/krnshrm/hs-block.git"
+  }
 }

@@ -10,12 +10,13 @@ export interface LiveStatus {
   lastError: string | null;
   url: string;
   intervalMs: number;
+  counts: { free: number; competitors: number; blocked: number; disposable: number };
 }
 
 export interface LiveUpdate {
   version: string | null;
   generatedAt: string | null;
-  counts: { free: number; competitors: number; blocked: number };
+  counts: { free: number; competitors: number; blocked: number; disposable: number };
 }
 
 export interface LiveOptions {

@@ -98,3 +98,65 @@ test('live: a suspiciously small payload is rejected', async () => {
   assert.equal(v.status().source, 'bundled');
   assert.equal(v.classify('karan@apollo.io'), 'blocked');
 });
+
+// ---- disposable list ----
+import { DISPOSABLE_DOMAINS } from '../src/index.js';
+
+test('disposable addresses get their own verdict and message', () => {
+  assert.equal(classifyEmail('karan@mailinator.com'), 'disposable');
+  const v = validateEmail('karan@mailinator.com');
+  assert.equal(v.ok, false);
+  assert.match(v.message, /permanent/i);
+});
+
+test('disposable matches sub-domains, per upstream', () => {
+  assert.equal(classifyEmail('karan@x.mailinator.com'), 'disposable');
+  assert.equal(classifyEmail('karan@a.b.mailinator.com'), 'disposable');
+});
+
+test('the disposable list never catches real providers', () => {
+  for (const e of ['a@hubsell.com', 'a@microsoft.com', 'a@siemens.com']) {
+    assert.notEqual(classifyEmail(e), 'disposable', e);
+  }
+  assert.equal(classifyEmail('a@gmail.com'), 'free');
+  assert.equal(classifyEmail('a@apollo.io'), 'blocked');
+});
+
+test('competitor and manual blocks still win over disposable', () => {
+  assert.equal(classifyEmail('karan@apollo.io'), 'blocked');
+  assert.equal(classifyEmail('karan@virgilian.com'), 'blocked');
+});
+
+test('the light entry point never returns disposable', () => {
+  assert.equal(classifyEmailLight('karan@mailinator.com'), 'ok');
+});
+
+test('the disposable list is big enough to be real', () => {
+  assert.ok(DISPOSABLE_DOMAINS.length > 5000);
+});
+
+test('live: a payload with a truncated disposable list is rejected', async () => {
+  const v = createLiveValidator({
+    fetchImpl: async () => ({
+      ok: true,
+      status: 200,
+      headers: { get: () => null },
+      json: async () => ({
+        free: Array.from({ length: 1500 }, (_, i) => `free${i}.com`),
+        competitors: Array.from({ length: 12 }, (_, i) => `comp${i}.com`),
+        blocked: [],
+        disposable: ['mailinator.com'],
+      }),
+    }),
+  });
+  assert.equal(await v.refresh(), false);
+  assert.equal(v.status().source, 'bundled');
+});
+
+test('live: 304 keeps the current lists', async () => {
+  const v = createLiveValidator({
+    fetchImpl: async () => ({ ok: false, status: 304, headers: { get: () => null } }),
+  });
+  assert.equal(await v.refresh(), true);
+  assert.equal(v.classify('a@mailinator.com'), 'disposable');
+});

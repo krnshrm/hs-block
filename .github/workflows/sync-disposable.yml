@@ -1,0 +1,45 @@
+name: sync-disposable
+
+# Pulls the upstream disposable-domain list and commits any change.
+# Weekly on Monday at 06:00 UTC, or on demand from the Actions tab.
+#
+# Pushing with GITHUB_TOKEN does not retrigger the ci workflow, so this job runs
+# the same check and test steps itself before committing anything.
+on:
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # Refuses to write if the list is implausibly small or shrank sharply.
+      - name: Sync upstream list
+        run: npm run sync:disposable
+
+      - name: Verify
+        run: |
+          npm run check
+          npm test
+
+      - name: Commit and push if changed
+        run: |
+          if git diff --quiet -- data generated; then
+            echo "no change, nothing to commit"
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          COUNT=$(node -p "require('./data/disposable.json').length")
+          git add data generated
+          git commit -m "Sync disposable domains from upstream ($COUNT domains)"
+          git push

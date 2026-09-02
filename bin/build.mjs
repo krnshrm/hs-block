@@ -33,6 +33,13 @@ const free = normalise(readJson('data/free.json'), 'data/free.json');
 const commonFree = normalise(readJson('data/common-free.json'), 'data/common-free.json');
 const competitors = normalise(readJson('data/competitors.json'), 'data/competitors.json');
 const blocked = normalise(readJson('data/blocked.json'), 'data/blocked.json');
+// Machine-maintained: written by bin/sync-disposable.mjs, never edited by hand.
+let disposable = [];
+try {
+  disposable = normalise(readJson('data/disposable.json'), 'data/disposable.json');
+} catch {
+  console.warn('warning: no data/disposable.json yet, run npm run sync:disposable');
+}
 
 // A domain on both the competitor and the ad-hoc list is harmless but pointless.
 const overlap = blocked.filter((d) => competitors.includes(d));
@@ -51,6 +58,7 @@ const full =
   arr('FREE', free) +
   arr('COMPETITORS', competitors) +
   arr('BLOCKED', blocked) +
+  arr('DISPOSABLE', disposable) +
   `export const VERSION = ${JSON.stringify(pkg.version)};\n` +
   `export const GENERATED_AT = ${JSON.stringify(generatedAt)};\n`;
 
@@ -72,11 +80,13 @@ const published =
         commonFree: commonFree.length,
         competitors: competitors.length,
         blocked: blocked.length,
+        disposable: disposable.length,
       },
       commonFree,
       competitors,
       blocked,
       free,
+      disposable,
     },
     null,
     2,
@@ -121,5 +131,6 @@ for (const [path, content] of targets) {
 
 console.log(
   `built v${pkg.version}: ${free.length} free, ${commonFree.length} common, ` +
-    `${competitors.length} competitors, ${blocked.length} blocked`,
+    `${competitors.length} competitors, ${blocked.length} blocked, ` +
+    `${disposable.length} disposable`,
 );

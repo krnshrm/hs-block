@@ -1,4 +1,4 @@
-export type EmailDomainVerdict = 'ok' | 'free' | 'blocked';
+export type EmailDomainVerdict = 'ok' | 'free' | 'blocked' | 'disposable';
 export type EmailVerdict = EmailDomainVerdict | 'invalid';
 
 export interface EmailValidation {
@@ -12,6 +12,7 @@ export const EMAIL_RE: RegExp;
 export const EMAIL_DOMAIN_MESSAGES: {
   readonly invalid: string;
   readonly blocked: string;
+  readonly disposable: string;
   readonly free: string;
 };
 export function emailDomain(email: string): string | null;
