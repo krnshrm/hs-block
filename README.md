@@ -56,6 +56,8 @@ Editing `data/blocked.json` or `data/competitors.json` by hand works too, as lon
 | `src/core.js` | The rules. No data, so entry points do not pull each other's lists. |
 | `bin/block.mjs` | The CLI. |
 | `bin/build.mjs` | Regenerates `generated/` from `data/`. |
+| `bin/sync-disposable.mjs` | Pulls the upstream disposable list. |
+| `src/selftest.js` | Shared fixtures, run by both consumers. |
 
 `generated/` is committed on purpose. It means consumers need no build step, and the app can fetch the published JSON straight from `main`.
 
@@ -126,6 +128,25 @@ Refreshes use `If-None-Match`, so an unchanged list costs a 304 rather than a fe
 ### Why the bundled copy still matters
 
 The pinned package is the floor. If GitHub is unreachable, the fetch times out or the payload looks wrong, the validator keeps serving the last good lists and never fails open. Three sanity floors reject a bad payload: at least 1,000 free domains, at least 10 competitors, and at least 5,000 disposable domains if that key is present at all. A truncated file cannot silently unblock everything.
+
+---
+
+## Self-test
+
+`hs-block/selftest` holds the fixtures both consumers run, so there is one definition of "the rules still work". It checks behaviour, not version numbers, because the version is not what breaks.
+
+```js
+import { validateEmail, DISPOSABLE_DOMAINS } from 'hs-block';
+import { assertRules } from 'hs-block/selftest';
+
+assertRules(validateEmail, { disposable: DISPOSABLE_DOMAINS.length }); // throws on failure
+```
+
+Use `runSelfTest()` instead if you want `{ failures, warnings, passed }` rather than an exception.
+
+Fixtures marked `required: false` are regressions from real incidents. They are reported as warnings rather than failures, so upstream dropping a domain never blocks anybody's deploy.
+
+The website runs this as a `prebuild` step: a failed check fails the build, so Cloudflare keeps serving the previous deploy instead of shipping a broken gate. The app should run it in CI and on its health endpoint.
 
 ---
 

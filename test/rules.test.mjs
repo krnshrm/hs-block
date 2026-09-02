@@ -160,3 +160,31 @@ test('live: 304 keeps the current lists', async () => {
   assert.equal(await v.refresh(), true);
   assert.equal(v.classify('a@mailinator.com'), 'disposable');
 });
+
+// ---- self-test fixtures ----
+import { runSelfTest, assertRules, FIXTURES } from '../src/selftest.js';
+import { COMPETITOR_DOMAINS as COMPS } from '../src/index.js';
+
+test('the shipped lists pass their own self-test', () => {
+  const r = runSelfTest(validateEmail, {
+    free: FREE_EMAIL_DOMAINS.size,
+    competitors: COMPS.length,
+    disposable: DISPOSABLE_DOMAINS.length,
+  });
+  assert.deepEqual(r.failures, []);
+  assert.deepEqual(r.warnings, []);
+  assert.equal(r.passed, FIXTURES.length);
+});
+
+test('the self-test catches a stale build that has no disposable list', () => {
+  // Simulates exactly what shipped: code with no disposable branch at all.
+  const stale = (email) => ({ verdict: email.includes('gmail') ? 'free' : 'ok' });
+  const r = runSelfTest(stale);
+  assert.ok(r.failures.some((f) => f.includes('mailinator.com')));
+  assert.throws(() => assertRules(stale), /self-test failed/);
+});
+
+test('a count below the floor is a failure even when the fixtures pass', () => {
+  const r = runSelfTest(validateEmail, { disposable: 12 });
+  assert.ok(r.failures.some((f) => f.includes('disposable list has 12')));
+});

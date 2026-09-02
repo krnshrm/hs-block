@@ -15,6 +15,15 @@ Two repos consume these lists. Neither keeps its own copy.
 - Its signup UI may use `hs-block/light` for instant feedback
 - The account-creation endpoint must call the live validator, never trust the client
 
+## The lockfile trap
+
+On 2 Sep 2026 the website's `package.json` asked for v1.1.0 while `package-lock.json` still pinned v1.0.0. Cloudflare builds with `npm ci`, which installs from the lockfile, so the live site ran code with no disposable rule and accepted every throwaway address. Nothing failed and nothing logged.
+
+Two things to know:
+
+- Plain `npm install` does **not** re-resolve a git dependency when a lock entry already exists. It prints "up to date" and changes nothing. Use `npm install "github:krnshrm/hs-block#vX.Y.Z"` explicitly, then check the lockfile shows the new commit hash.
+- Both consumers run `hs-block/selftest`, which turns this into a loud failure. The website fails its build; the app should fail CI.
+
 ## Rules
 
 1. Never copy a domain list into either consumer. Import it.

@@ -1,6 +1,6 @@
 {
   "name": "hs-block",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Single source of truth for hubsell email domain rules: competitors, manual blocks and free providers.",
   "license": "UNLICENSED",
   "type": "module",
@@ -19,7 +19,11 @@
       "types": "./types/live.d.ts",
       "default": "./src/live.js"
     },
-    "./data": "./generated/email-domains.json"
+    "./data": "./generated/email-domains.json",
+    "./selftest": {
+      "types": "./types/selftest.d.ts",
+      "default": "./src/selftest.js"
+    }
   },
   "files": [
     "src",
